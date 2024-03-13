@@ -1,0 +1,9 @@
+aiofiles==23.2.1
+colorlog==6.8.2
+fastapi==0.110.0
+pydantic==2.6.4
+pydantic_settings==2.2.1
+PyDrive2==1.19.0
+python-dotenv==1.0.1
+torch==2.2.0+cu118
+transformers==4.38.2
