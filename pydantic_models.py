@@ -5,11 +5,6 @@ from typing import Union
 from pydantic import BaseModel, field_validator, Field, ValidationError
 from fastapi import UploadFile
 
-from workflow_states_code import WorkflowEnum
-
-
-
-
 
 # Asynchronous UploadeFile validation function
 async def validate_upload_file(upload_file: UploadFile):
@@ -77,14 +72,7 @@ class MP3filename(BaseModel):
             raise ValueError(f"The file length is not between {FilenameLengthChecker.MIN_LENGTH} and {FilenameLengthChecker.MAX_LENGTH} .")
         return v
 
-class StatusModel(BaseModel):
-    transcript_audio_quality: str = "medium"
-    transcript_compute_type: str = "float16"
-    mp3_gfile_id: str | None = None
-    status: str = WorkflowEnum.NOT_STARTED.name
-    comment: str | None = None
-    transcript_gdrive_id: str | None = None
-    transcript_gdrive_filename: str | None = None
+
 
 class YouTubeUrl(BaseModel):
     yt_url: str

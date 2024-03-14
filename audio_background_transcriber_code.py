@@ -11,9 +11,6 @@ from pydantic_models import GDriveInput
 
 def init_WorkflowTracker_mp3(mp3_gdrive_id):
     WorkflowTracker.update(
-    transcript_audio_quality= "medium",
-    transcript_compute_type= "float16",
-
     input_mp3 = GDriveInput(gdrive_id=mp3_gdrive_id)
 
     )

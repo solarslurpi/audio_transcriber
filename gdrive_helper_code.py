@@ -9,12 +9,12 @@ from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
 from workflow_states_code import WorkflowEnum
-from workflow_tracker_code import WorkflowTracker
+from workflow_tracker_code import WorkflowTracker, StatusModel
 from env_settings_code import get_settings
 from logger_code import LoggerBase
 from update_status import async_error_handler,update_status
 from workflow_error_code import handle_error
-from pydantic_models import GDriveInput, TranscriptText, MP3filename, StatusModel
+from pydantic_models import GDriveInput, TranscriptText, MP3filename
 
 
 
@@ -172,6 +172,8 @@ class GDriveHelper:
         def _get_status_model() -> Union[dict, None]:
             gfile = self.drive.CreateFile({'id': gfile_id})
             gfile.FetchMetadata(fields="description")
+            # An mp3 file just placed in the mp3 GDrive dir will not have a description field.
+            # This check creates one if this is the case.
             try:
                 transcription_status_json = gfile['description']
             except KeyError:

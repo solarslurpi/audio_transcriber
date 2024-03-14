@@ -47,7 +47,7 @@ from pydantic_models import (
                              GDriveInput,
                              validate_upload_file)
 from workflow_states_code import WorkflowEnum
-from workflow_tracker_code import WorkflowTracker, WorkflowTrackerModel, AUDIO_QUALITY_MAP, COMPUTE_TYPE_MAP
+from workflow_tracker_code import WorkflowTracker, AUDIO_QUALITY_MAP, COMPUTE_TYPE_MAP
 from update_status import update_status
 from workflow_error_code import async_error_handler
 
@@ -78,30 +78,26 @@ class AudioTranscriber:
     async def transcribe(self) -> str:
 
         """
-        Asynchronously transcribes audio from an input source to text. This method handles the entire workflow of the
-        transcription process, including loading the audio file from a specified source, transcribing the audio content
-        to text, and managing any intermediate steps such as file conversions and quality adjustments.
+        Transcribes audio to text, orchestrating workflow via WorkflowTracker updates.
 
-        The method leverages various internal methods to perform specific tasks such as creating a local copy of the
-        audio file, updating workflow status, and actual transcription using chosen models and compute types.
+        Prerequisites:
+        - WorkflowTracker initialized with:
+            - input_mp3: GDriveInput or UploadFile datatype set.
 
-        Parameters:
-        - options (Union[TranscriptionOptionsWithUpload, TranscriptionOptionsWithPath]): An instance of
-        `TranscriptionOptionsWithUpload` or `TranscriptionOptionsWithPath` containing the necessary configuration
-        for the transcription process. This includes the source of the audio file (either a direct upload or a reference
-        to a file stored in Google Drive), audio quality preferences, and the desired compute type for transcription.
+        Workflow Progress:
+        1. Validates input source and creates a local copy of the mp3 file.
+        2. Uploads the mp3 file to GDrive if it isn't there already. Note: status info is
+           tracked within the description field of the mp3 GDrive file.
+        3. Uses Whisper to translate the audio file to text.
+        4. Uploads resulting transcript to Google Drive.
 
         Returns:
-        - str: The transcribed text from the audio content.
+            str: The transcribed text.
 
         Raises:
-        - Various exceptions related to file handling, transcription errors, or API limitations could be raised and are
-        handled by the async_error_handler decorator to update the workflow status accordingly.
-
-        Note:
-        - This method is designed to be called asynchronously within an asyncio event loop to efficiently manage I/O
-        operations and long-running tasks without blocking the execution of other coroutines.
-    """
+            - HTTPException: For issues during file handling and transcription.
+            - ValueError: For invalid input types or workflow status.
+        """
         gfile_id = None
         input_mp3 = WorkflowTracker.get('input_mp3')
         if isinstance(input_mp3, GDriveInput):
@@ -267,10 +263,6 @@ class AudioTranscriber:
         """
         # TODO: Start from this entry and not just transcribe?
 
-        WorkflowTrackerModel.status = WorkflowEnum.TRANSCRIPTION_STARTING.name
-        WorkflowTrackerModel.comment ='At beginning of transcribe_mp3'
-        await self.gh.log_status()
-
         # Proceed with transcription using the validated options
         self.logger.debug(f"Transcribing file path: {WorkflowTracker.get('local_mp3_path')} with quality {WorkflowTracker.get('transcript_audio_quality')} and compute type {WorkflowTracker.get('transcript_compute_type')}")
         transcription_text = await self.whisper_transcribe()
@@ -296,15 +288,10 @@ class AudioTranscriber:
         Insight:
         Central to the transcription workflow, this method directly interacts with the transcription model, reflecting the process's start, ongoing status, and completion in the workflow tracker. The choice of model and compute type allows for customizable transcription fidelity and performance.
         """
-        audio_quality_setting = self.settings.audio_quality_default
-        compute_type_setting = self.settings.compute_type_default
-        default_audio_model = AUDIO_QUALITY_MAP.get(audio_quality_setting)
-        default_compute_type = COMPUTE_TYPE_MAP.get(compute_type_setting)
-        self.logger.debug(f"Default audio quality: {default_audio_model} and default compute type: {default_compute_type}")
         audio_quality_text_representation = WorkflowTracker.get('transcript_audio_quality')
         compute_type_text_representation = WorkflowTracker.get('transcript_compute_type')
-        hf_model_name = AUDIO_QUALITY_MAP.get(audio_quality_text_representation,default_audio_quality)
-        compute_type_pytorch = COMPUTE_TYPE_MAP.get(compute_type_text_representation, default_compute_type)
+        hf_model_name = AUDIO_QUALITY_MAP.get(audio_quality_text_representation,"default")
+        compute_type_pytorch = COMPUTE_TYPE_MAP.get(compute_type_text_representation, "default")
 
         self.logger.debug(f"Starting transcription with model: {hf_model_name} and compute type: {compute_type_pytorch}")
         WorkflowTracker.update(

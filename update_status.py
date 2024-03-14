@@ -1,12 +1,10 @@
 
 import json
 
-from workflow_states_code import WorkflowStates, WorkflowEnum
 from workflow_error_code import async_error_handler
 from logger_code import LoggerBase
 from workflow_tracker_code import WorkflowTracker
 
-error_state = WorkflowStates(status=WorkflowEnum.ERROR)
 
 @async_error_handler()
 async def update_status():

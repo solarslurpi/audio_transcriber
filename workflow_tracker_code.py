@@ -13,6 +13,7 @@ from pydantic import BaseModel, field_validator, field_serializer, ValidationErr
 
 from logger_code import LoggerBase
 from pydantic_models import GDriveInput
+from workflow_states_code import WorkflowEnum
 
 AUDIO_QUALITY_MAP = {
     "default":  "distil-whisper/distil-large-v2",
@@ -37,11 +38,20 @@ COMPUTE_TYPE_MAP = {
     "float16": torch.float16,
     "float32": torch.float32,
 }
+# These are the fields that get saved within the description field of the mp3 file.
+class StatusModel(BaseModel):
+    transcript_audio_quality: str = "default"
+    transcript_compute_type: str = "default"
+    mp3_gfile_id: str | None = None
+    status: str = WorkflowEnum.NOT_STARTED.name
+    comment: str | None = None
+    transcript_gdrive_id: str | None = None
+    transcript_gdrive_filename: str | None = None
 
 
 class BaseTrackerModel(BaseModel):
-    transcript_audio_quality: str
-    transcript_compute_type: str
+    transcript_audio_quality: str = "default"
+    transcript_compute_type: str = "default"
     input_mp3: Optional[Union[UploadFile, GDriveInput]] = None
 
     @field_serializer('input_mp3',when_used='json-unless-none')

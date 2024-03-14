@@ -8,13 +8,11 @@ class WorkflowEnum(Enum):
     START = "start"
     MP3_UPLOADED = "mp3_uploaded"
     MP3_DOWNLOADED = "mp3_downloaded"
-    TRANSCRIPTION_STARTING = "transcription_starting"
     TRANSCRIBING = "transcribing","transcribing"
     TRANSCRIPTION_FAILED = "transcription_failed"
     TRANSCRIPTION_COMPLETE = "transcription_complete"
-    TRANSCRIPTION_UPLOAD_STARTING = "transcription upload starting"
     TRANSCRIPTION_UPLOAD_COMPLETE = "transcription upload complete"
-    ERROR = "error"
+
 
     @classmethod
     def match_value(cls, value):
