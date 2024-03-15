@@ -12,8 +12,6 @@ load_dotenv()
 class Settings(BaseSettings):
     gdrive_mp3_folder_id: str
     gdrive_transcripts_folder_id: str
-    audio_quality_default: str
-    compute_type_default: str
     google_service_account_credentials_path: str
     google_drive_oauth_scopes: List[str]
     local_mp3_dir: str

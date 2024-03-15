@@ -4,15 +4,14 @@ import json
 from typing import Union
 
 import aiofiles
-from pydantic import ValidationError
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
 from workflow_states_code import WorkflowEnum
-from workflow_tracker_code import WorkflowTracker, StatusModel
+from workflow_tracker_code import WorkflowTracker
 from env_settings_code import get_settings
 from logger_code import LoggerBase
-from update_status import async_error_handler,update_status
+from monitor_status_update import async_error_handler
 from workflow_error_code import handle_error
 from pydantic_models import GDriveInput, TranscriptText, MP3filename
 
@@ -43,7 +42,7 @@ class GDriveHelper:
         return gauth
 
     @async_error_handler()
-    async def log_status(self) -> None:
+    async def update_mp3_gfile_status(self) -> None:
         able_to_store_state = False
         if WorkflowTracker.get('mp3_gfile_id'):
             await self.update_transcription_status_in_mp3_gfile()
@@ -102,19 +101,14 @@ class GDriveHelper:
         mp3_filename = await self.get_filename(mp3_gfile_input)
         txt_filename = mp3_filename[:-4] + '.txt'
         local_transcript_dir = Path(self.settings.local_transcript_dir)
+        local_transcript_dir.mkdir(parents=True, exist_ok=True)
         local_transcript_file_path = local_transcript_dir / txt_filename
         async with aiofiles.open(str(local_transcript_file_path), "w") as temp_file:
             await temp_file.write(str(transcript_text))
         folder_gdrive_id = self.settings.gdrive_transcripts_folder_id
 
         transcription_gfile_id = await self.upload(GDriveInput(gdrive_id=folder_gdrive_id),local_transcript_file_path)
-        WorkflowTracker.update(
-        status=WorkflowEnum.TRANSCRIPTION_UPLOAD_COMPLETE.name,
-        comment= 'Adding the transcription gfile tracker id',
-        transcript_gdrive_id=transcription_gfile_id,
-        transcript_filename = local_transcript_file_path.name
-        )
-        await update_status()
+
         return transcription_gfile_id,txt_filename
 
     @async_error_handler(error_message = 'Could not upload the transcript to gdrive transcript folder.')
@@ -165,34 +159,29 @@ class GDriveHelper:
         return verified_filename.filename
 
     @async_error_handler(error_message = 'Could not fetch the transcription status from the description field of the gfile.')
-    async def get_status_model(self, gdrive_input: GDriveInput) -> Union[dict, None]:
+    async def get_status_field(self, gdrive_input: GDriveInput) -> Union[dict, None]:
         gfile_id = gdrive_input.gdrive_id
         loop = asyncio.get_running_loop()
 
-        def _get_status_model() -> Union[dict, None]:
+        def _get_status_field() -> Union[dict, None]:
             gfile = self.drive.CreateFile({'id': gfile_id})
             gfile.FetchMetadata(fields="description")
-            # An mp3 file just placed in the mp3 GDrive dir will not have a description field.
-            # This check creates one if this is the case.
+
             try:
                 transcription_status_json = gfile['description']
+                transcription_status_dict = json.loads(transcription_status_json)
+                # Update the WorkflowTracker model with the parsed dictionary
+                WorkflowTracker.update(**transcription_status_dict)
             except KeyError:
-                status_model = StatusModel()
-                transcription_status_json = status_model.model_dump_json()
+                # An mp3 file just placed in the mp3 GDrive dir will not have a description field. This check creates one if this is the case.
+                transcription_status_json = WorkflowTracker.get_model().model_dump_json()
                 gfile['description'] = transcription_status_json
                 gfile.Upload()
+            # Other errors handled by the error handling decorator.
+            return # WorkflowTracker is a singleton.
 
-            transcription_status_dict = json.loads(transcription_status_json)
-            try:
-                status_model = StatusModel.model_validate(transcription_status_dict)
-            except ValidationError as e:
-                self.logger.error(f"{e}")
-                status_model = StatusModel(status=WorkflowEnum.NOT_STARTED.name)
-            return status_model
-
-        transcription_status_dict = await loop.run_in_executor(None, _get_status_model)
-        self.logger.debug(f"The transcription status dict is {transcription_status_dict} for gfile_id: {gfile_id}")
-        return transcription_status_dict
+        await loop.run_in_executor(None, _get_status_field)
+        return
 
     @async_error_handler(error_message = 'Could not get a list of mp3 files from the GDrive ID.')
     async def list_files_to_transcribe(self, gdrive_folder_id: str) -> list:
@@ -208,16 +197,7 @@ class GDriveHelper:
         gfiles_to_transcribe_list = await loop.run_in_executor(None, _get_file_info)
         return gfiles_to_transcribe_list
 
-    @async_error_handler(error_message = 'Error attempting to delete and mp3 gfile.')
+    @async_error_handler(error_message = 'Error attempting to delete gfile.')
     async def delete_file(self, file_id: str):
         file = self.drive.CreateFile({'id': file_id})
         file.Delete()
-
-    @async_error_handler(error_message = 'Error attempting to delete and mp3 gfile.')
-    async def reset_status_model(self, gdrive_input:GDriveInput):
-        gfile_id = gdrive_input.gdrive_id
-        gfile = self.drive.CreateFile({'id': gfile_id})
-        status_model = StatusModel()
-        status_model_json = status_model.model_dump_json()
-        gfile['description'] = status_model_json
-        gfile.Upload()

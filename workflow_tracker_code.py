@@ -9,11 +9,10 @@ from fastapi.encoders import jsonable_encoder
 
 import torch
 
-from pydantic import BaseModel, field_validator, field_serializer, ValidationError
+from pydantic import BaseModel, field_validator, field_serializer
 
 from logger_code import LoggerBase
 from pydantic_models import GDriveInput
-from workflow_states_code import WorkflowEnum
 
 AUDIO_QUALITY_MAP = {
     "default":  "distil-whisper/distil-large-v2",
@@ -38,21 +37,18 @@ COMPUTE_TYPE_MAP = {
     "float16": torch.float16,
     "float32": torch.float32,
 }
-# These are the fields that get saved within the description field of the mp3 file.
-class StatusModel(BaseModel):
-    transcript_audio_quality: str = "default"
-    transcript_compute_type: str = "default"
-    mp3_gfile_id: str | None = None
-    status: str = WorkflowEnum.NOT_STARTED.name
-    comment: str | None = None
-    transcript_gdrive_id: str | None = None
-    transcript_gdrive_filename: str | None = None
 
 
-class BaseTrackerModel(BaseModel):
+class WorkflowTrackerModel(BaseModel):
     transcript_audio_quality: str = "default"
     transcript_compute_type: str = "default"
     input_mp3: Optional[Union[UploadFile, GDriveInput]] = None
+    mp3_gfile_id: Optional[str] = None
+    local_mp3_path: Union[Path, None] = None
+    status: str = None
+    comment: Optional[str] = None
+    transcript_gdrive_id: str = None
+    transcript_gdrive_filename: str = None
 
     @field_serializer('input_mp3',when_used='json-unless-none')
     def serialize_input_mp3(self,input_mp3):
@@ -78,9 +74,6 @@ class BaseTrackerModel(BaseModel):
         if v not in COMPUTE_TYPE_MAP:
             raise ValueError(f"{v} is not a valid compute type.")
         return v
-
-class TranscriptionModel(BaseTrackerModel):
-    local_mp3_path: Union[Path, None] = None
 
     @field_serializer('local_mp3_path')
     def serialize_local_mp3_path(self, local_mp3_path: Path):
@@ -115,14 +108,6 @@ class TranscriptionModel(BaseTrackerModel):
 
         return v
 
-class WorkflowTrackerModel(TranscriptionModel):
-    mp3_gfile_id: Optional[str] = None
-    status: str = None
-    comment: Optional[str] = None
-    transcript_audio_quality: Optional[str] = None
-    transcript_compute_type: Optional[str] = None
-    transcript_gdrive_id: str = None
-    transcript_gdrive_filename: str = None
 
 class WorkflowTracker:
     _model = WorkflowTrackerModel()
@@ -146,32 +131,6 @@ class WorkflowTracker:
                 else:
                     raise ValueError(f"{key} is not a property of WorkflowTrackerModel and no similar field found.")
 
-    @classmethod
-    def update_from_transcription_model(cls, base_tracker_model_instance:BaseTrackerModel):
-        """
-        Updates the _model with values from an instance of TranscriptionModel.
-        """
-        try:
-            # Create a new WorkflowTrackerModel instance from the TranscriptionModel instance
-            # This effectively "copies" the values from transcription_model_instance to a new WorkflowTrackerModel instance
-            # new_model_instance = WorkflowTrackerModel.model_validate(base_tracker_model_instance,from_attributes=True)
-
-            source_instance = base_tracker_model_instance
-            just_basetracker_attribs_instance = BaseTrackerModel(
-                **source_instance.model_dump()
-            )
-            cls._logger.info(f"input_mp3 type before: {type(cls._model.input_mp3)}")
-            for attr_name, _ in just_basetracker_attribs_instance:
-                if hasattr(cls._model, attr_name):
-                    setattr(cls._model, attr_name, getattr(just_basetracker_attribs_instance, attr_name))
-                    cls._logger.info(f"input_mp3 type after: {type(cls._model.input_mp3)}")
-
-
-            # Update the class's _model instance
-            # cls._model = new_model_instance
-            # cls._logger.debug("WorkflowTracker model just updated from TranscriptionModel instance.")
-        except (ValidationError, AttributeError, TypeError) as e:
-            cls._logger.error(f"Failed to update from TranscriptionModel.Error type: {type(e).__name__} Error: {e}")
 
     @classmethod
     def get(cls, field_name):

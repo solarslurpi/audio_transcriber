@@ -1,11 +1,11 @@
 ###########################################################################################
 # Author: HappyDay Johnson
 # Version: 0.01
-# Date: 2024-02-27
+# Date: 2024-03-20
 # Summary: The audio_transcriber module converts speech from audio files into
 # written text. It processes audio files either uploaded directly or referenced
 # by their Google Drive (gDrive) ID, producing text transcripts. The module
-# utilizes Googl  Drive's description field of an audio file to track the
+# utilizes Google  Drive's description field of an audio file to track the
 # transcription process and uploads the resulting text to a specified Google Drive
 # folder, as defined in the environment settings.
 #
@@ -48,7 +48,7 @@ from pydantic_models import (
                              validate_upload_file)
 from workflow_states_code import WorkflowEnum
 from workflow_tracker_code import WorkflowTracker, AUDIO_QUALITY_MAP, COMPUTE_TYPE_MAP
-from update_status import update_status
+from monitor_status_update import monitor_status_update
 from workflow_error_code import async_error_handler
 
 class AudioTranscriber:
@@ -61,18 +61,15 @@ class AudioTranscriber:
     Google Drive), transcription using a specific API, and error handling throughout the process.
 
     Attributes:
-        settings: Configuration settings for the transcriber.
-        directory (Path): Path to the directory where temporary transcripts are stored.
-        tracker (WorkflowTracker): An instance of WorkflowTracker to track the transcription process.
+        settings: Environmental configuration settings for the transcriber.
         logger (Logger): A logger for logging information about the transcription process.
-
         gh (GDriveHelper): A helper for interacting with Google Drive files.
     """
     def __init__(self):
         self.settings = get_settings()
         self.logger = LoggerBase.setup_logger("AudioTranscriber")
         self.gh = GDriveHelper()
-        self.workflow_tracker = WorkflowTracker
+
 
     @async_error_handler()
     async def transcribe(self) -> str:
@@ -83,6 +80,10 @@ class AudioTranscriber:
         Prerequisites:
         - WorkflowTracker initialized with:
             - input_mp3: GDriveInput or UploadFile datatype set.
+            - transcript_audio_quality: OPTIONAL. One of the text strings within
+              AUDIO_QUALITY_MAP.  The default value is "default" by the WorkflowTrackerModel on instance creation.
+            - transcript_compute_type: OPTIONAL. This is either "float16" or "float32".
+              By default the WorkflowTrackerModel instantiates "default" ("float16").
 
         Workflow Progress:
         1. Validates input source and creates a local copy of the mp3 file.
@@ -95,51 +96,35 @@ class AudioTranscriber:
             str: The transcribed text.
 
         Raises:
-            - HTTPException: For issues during file handling and transcription.
-            - ValueError: For invalid input types or workflow status.
+            -sll errors are handled by the @async_error_handler() decorator.
         """
         gfile_id = None
         input_mp3 = WorkflowTracker.get('input_mp3')
         if isinstance(input_mp3, GDriveInput):
             gfile_id = input_mp3.gdrive_id
         mp3_gfile_id = gfile_id if gfile_id else None
-        WorkflowTracker.update(
-        status=WorkflowEnum.START.name,
-        comment= "Starting the transcription workflow.",
-        mp3_gfile_id = mp3_gfile_id
-        )
-        await self.gh.log_status()
+
+        await self.update_and_monitor_gdrive_status(status=WorkflowEnum.START.name,
+        comment= "Starting the transcription workflow.", mp3_gfile_id = mp3_gfile_id)
+
         # First load the mp3 file (either a GDrive file or uploaded) into a local temporary file
         mp3_gfile_id, local_mp3_path = await self.create_local_mp3_from_input()
-        WorkflowTracker.update(
-        status=WorkflowEnum.MP3_DOWNLOADED.name,
-        comment="mp3 file is ready for transcription.",
-        mp3_gfile_id=mp3_gfile_id,
-        local_mp3_path=local_mp3_path
-        )
-        await self.gh.log_status()
-        await update_status()
-        transcription_text = await self.transcribe_mp3()
-        WorkflowTracker.update(
-            status=WorkflowEnum.TRANSCRIPTION_COMPLETE.name,
-            comment= f'Success! First 50 chars: {transcription_text[:50]}',
-        )
-        await self.gh.log_status()
-        await update_status()
-        self.logger.debug(f"Transcription: {transcription_text[:200]}")
-        transcript_gfile_id, transcript_filename = await self.gh.upload_transcript_to_gdrive(transcription_text)
-        WorkflowTracker.update(
-        status=WorkflowEnum.TRANSCRIPTION_UPLOAD_COMPLETE.name,
-        transcript_gdrive_id=transcript_gfile_id,
-        transcript_gdrive_filename= transcript_filename,
-        comment= 'Transcript available within the transcript folder (unless moved/deleted).'
-        )
 
-        await self.gh.log_status()
+        await self.update_and_monitor_gdrive_status(status = WorkflowEnum.MP3_UPLOADED.name,mp3_gfile_id = mp3_gfile_id,local_mp3_path = local_mp3_path)
+
+        transcription_text = await self.transcribe_mp3()
+
+        await self.update_and_monitor_gdrive_status(status=WorkflowEnum.TRANSCRIPTION_COMPLETE.name,comment= f'Success! First 50 chars: {transcription_text[:50]}')
+
+        transcript_gfile_id, transcript_filename = await self.gh.upload_transcript_to_gdrive(transcription_text)
+
+        await self.update_and_monitor_gdrive_status(status=WorkflowEnum.TRANSCRIPTION_UPLOAD_COMPLETE.name,
+        transcript_gdrive_id=transcript_gfile_id,transcript_gdrive_filename= transcript_filename,
+        comment= 'Transcript available within the transcript folder (unless moved/deleted).')
+
         return transcription_text
 
     @async_error_handler()
-
     async def create_local_mp3_from_input(self) -> Path:
         """
         Asynchronously creates a local copy of an MP3 file from the specified input.
@@ -169,12 +154,7 @@ class AudioTranscriber:
         elif isinstance(input_mp3, GDriveInput):
             mp3_gfile_id, mp3_path = await self.copy_gfile_to_local_mp3(input_mp3)
 
-        WorkflowTracker.update(
-            status = WorkflowEnum.MP3_UPLOADED.name,
-            mp3_gdrive_id = mp3_gfile_id,
-            local_mp3_path = mp3_path
-            )
-        await self.gh.log_status()
+
         return mp3_gfile_id, mp3_path
 
     @async_error_handler()
@@ -261,12 +241,10 @@ class AudioTranscriber:
         This method is a core part of the transcription workflow, bridging between file preparation and the final text output.
         It highlights the use of specific transcription options to optimize accuracy and performance.
         """
-        # TODO: Start from this entry and not just transcribe?
 
         # Proceed with transcription using the validated options
         self.logger.debug(f"Transcribing file path: {WorkflowTracker.get('local_mp3_path')} with quality {WorkflowTracker.get('transcript_audio_quality')} and compute type {WorkflowTracker.get('transcript_compute_type')}")
         transcription_text = await self.whisper_transcribe()
-
 
         return transcription_text
 
@@ -294,19 +272,16 @@ class AudioTranscriber:
         compute_type_pytorch = COMPUTE_TYPE_MAP.get(compute_type_text_representation, "default")
 
         self.logger.debug(f"Starting transcription with model: {hf_model_name} and compute type: {compute_type_pytorch}")
-        WorkflowTracker.update(
-        status=WorkflowEnum.TRANSCRIBING.name,
-        comment= f'Start by loading the whisper {hf_model_name} model.',
-        )
-        await self.gh.log_status()
-        await update_status()
+
+        await self.update_and_monitor_gdrive_status( status=WorkflowEnum.TRANSCRIBING.name,transcript_audio_quality=hf_model_name, transcript_compute_type=compute_type_text_representation,
+        comment= f'Start by loading the whisper {hf_model_name} model.')
+
         transcription_text = ""
         audio_file_path = WorkflowTracker.get('local_mp3_path')
         audio_file_path_str = str(audio_file_path) # Pathname to filename.
         transcription_text = await self._transcribe_pipeline(audio_file_path_str, hf_model_name, compute_type_pytorch)
-
-        await update_status()
         return transcription_text
+
 
     @async_error_handler()
     async def _transcribe_pipeline(self, audio_filename: str, model_name: str, compute_float_type: torch.dtype) -> str:
@@ -339,3 +314,23 @@ class AudioTranscriber:
         # Run the blocking operation in an executor
         result = await loop.run_in_executor(None, load_and_run_pipeline)
         return result['text']
+
+    async def update_and_monitor_gdrive_status(self, status, comment=None, mp3_gfile_id=None, local_mp3_path=None, transcript_audio_quality=None, transcript_compute_type=None, transcript_gdrive_id=None, transcript_gdrive_filename=None):
+        # Prepare the keyword arguments for updating the WorkflowTracker
+        update_kwargs = {
+            'status': status,
+            'comment': comment,
+            'mp3_gfile_id': mp3_gfile_id,
+            'local_mp3_path': local_mp3_path,
+            'transcript_audio_quality': transcript_audio_quality,
+            'transcript_compute_type': transcript_compute_type,
+            'transcript_gdrive_id': transcript_gdrive_id,
+            'transcript_gdrive_filename': transcript_gdrive_filename
+        }
+        # Filter out None values
+        filtered_kwargs = {k: v for k, v in update_kwargs.items() if v is not None}
+
+        # Update the WorkflowTracker
+        WorkflowTracker.update(**filtered_kwargs)
+        await self.gh.update_mp3_gfile_status()
+        await monitor_status_update()

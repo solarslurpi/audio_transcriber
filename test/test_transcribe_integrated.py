@@ -6,7 +6,7 @@ from fastapi import UploadFile
 
 from audio_transcriber_code import AudioTranscriber
 from gdrive_helper_code import GDriveHelper
-from workflow_tracker_code import TranscriptionModel, WorkflowTracker
+from workflow_tracker_code import  WorkflowTracker
 from pydantic_models import  GDriveInput
 
 
@@ -48,25 +48,6 @@ def init_WorkflowTracker_mp3(valid_mp3_gdrive_id,valid_mp3_path):
     print(f"/n-----> input_mp3 type: {type(WorkflowTracker.get('input_mp3'))}")
     return
 
-def valid_transcription_options(input_file,local_mp3_path=None):
-    transcription_options = TranscriptionModel(
-    transcript_audio_quality= "medium",
-    transcript_compute_type= "float16",
-    local_mp3_path=local_mp3_path,
-    input_mp3=input_file
-
-    )
-    return transcription_options
-
-@pytest.fixture
-def mp3_transcription_options(valid_mp3_gdrive_id,valid_mp3_path):
-    options = valid_transcription_options(GDriveInput(gdrive_id=valid_mp3_gdrive_id),valid_mp3_path)
-    return options
-
-@pytest.fixture
-def uploadFile_transcription_options(valid_UploadFile):
-    options = valid_transcription_options(valid_UploadFile)
-    return options
 
 
 @pytest.mark.asyncio
