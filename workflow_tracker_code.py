@@ -48,7 +48,7 @@ class WorkflowTrackerModel(BaseModel):
     status: str = None
     comment: Optional[str] = None
     transcript_gdrive_id: str = None
-    transcript_gdrive_filename: str = None
+    local_transcript_path: str = None
 
     @field_serializer('input_mp3',when_used='json-unless-none')
     def serialize_input_mp3(self,input_mp3):

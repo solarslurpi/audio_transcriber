@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     google_drive_oauth_scopes: List[str]
     local_mp3_dir: str
     local_transcript_dir: str
+    remove_temp_mp3: bool
+    remove_temp_transcription: bool
 
     @field_validator('google_drive_oauth_scopes')
     @classmethod

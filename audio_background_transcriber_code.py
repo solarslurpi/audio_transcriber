@@ -4,7 +4,7 @@ from gdrive_helper_code import GDriveHelper
 from audio_transcriber_code import AudioTranscriber
 from workflow_states_code import WorkflowEnum
 from workflow_tracker_code import WorkflowTracker
-from monitor_status_update import async_error_handler
+from workflow_error_code import async_error_handler
 from logger_code import LoggerBase
 from env_settings_code import get_settings
 from pydantic_models import GDriveInput

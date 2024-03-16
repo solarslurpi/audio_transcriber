@@ -1,3 +1,39 @@
+###########################################################################################
+# Author: HappyDay Johnson
+# Version: 0.01
+# Date: 2024-03-20
+# Summary: The gdrive_helper module provides a set of tools for interacting with Google Drive.
+# It offers functionalities such as authenticating with Google Drive via a service account,
+# uploading and downloading files, updating file descriptions to track the status of operations,
+# and handling files within specified Google Drive folders. It is designed to work closely with
+# the audio_transcriber module, facilitating the management of audio files and their transcriptions
+# by utilizing Google Drive's storage capabilities. This module leverages the pydrive2 library
+# for Drive operations and integrates with the workflow tracking system to maintain the state
+# of transcription processes.
+#
+# License Information: MIT License
+#
+# Copyright (c) 2024 HappyDay Johnson
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+###########################################################################################
+
 from pathlib import Path
 import asyncio
 import json
@@ -7,32 +43,58 @@ import aiofiles
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
-from workflow_states_code import WorkflowEnum
+
 from workflow_tracker_code import WorkflowTracker
 from env_settings_code import get_settings
 from logger_code import LoggerBase
-from monitor_status_update import async_error_handler
-from workflow_error_code import handle_error
+from workflow_error_code import handle_error, async_error_handler
 from pydantic_models import GDriveInput, TranscriptText, MP3filename
 
 
 
 
 class GDriveHelper:
+    """
+    Facilitates interaction with Google Drive for file operations within the transcription process.
+
+    This class provides methods to authenticate via a service account, and perform various Google Drive
+    operations such as uploading, downloading, and updating file descriptions. It is designed to support
+    the workflow of managing audio files and their transcriptions on Google Drive.
+
+    Attributes:
+        logger (Logger): Logger instance for logging messages.
+        gauth (GoogleAuth): Authentication object for Google Drive.
+        drive (GoogleDrive): Google Drive service object for interacting with the API.
+        settings (Settings): Configuration settings loaded from environment variables.
+    """
     def __init__(self):
+        self.settings = get_settings()
         self.logger = LoggerBase.setup_logger()
         self.gauth = self._login_with_service_account()
         self.drive = GoogleDrive(self.gauth)
-        self.settings = get_settings()
+
 
     def _login_with_service_account(self):
+        """
+        Authenticates with Google Drive using a service account.
+
+        This method sets up authentication for Google Drive operations by using service account credentials
+        specified in the environment settings. It configures the authentication process with the necessary
+        OAuth scopes and the path to the service account's JSON credentials file.
+
+        Returns:
+            GoogleAuth: An authenticated GoogleAuth instance ready for use with Google Drive operations.
+
+        Raises:
+            Exception: If authentication fails due to issues with the service account credentials or other
+            related errors, the exception is propagated upwards for handling.
+        """
         try:
-            settings = get_settings()
             login_settings = {
                 "client_config_backend": "service",
-                "oauth_scope": settings.google_drive_oauth_scopes,
+                "oauth_scope": self.settings.google_drive_oauth_scopes,
                 "service_config": {
-                    "client_json_file_path":settings.google_service_account_credentials_path
+                    "client_json_file_path":self.settings.google_service_account_credentials_path
                 }
             }
             gauth = GoogleAuth(settings=login_settings)
@@ -43,34 +105,31 @@ class GDriveHelper:
 
     @async_error_handler()
     async def update_mp3_gfile_status(self) -> None:
-        able_to_store_state = False
-        if WorkflowTracker.get('mp3_gfile_id'):
-            await self.update_transcription_status_in_mp3_gfile()
-            able_to_store_state = True
-        log_message = WorkflowTracker.get_model().model_dump_json(indent=4)
-        state_message = f"\n-------------\nstate stored: {able_to_store_state}"
-        # Combine the JSON message with the state storage status
-        full_log_message = f"{log_message}\n{state_message}"
-        self.logger.flow(full_log_message)
+        """
+        Asynchronously updates the status of the transcription process in the associated Google Drive file's description.
 
-    @async_error_handler()
-    async def update_transcription_status_in_mp3_gfile(self) -> bool:
+        Updates the file's description with the current transcription status if an MP3 file's Google Drive ID is found, and logs the workflow state.
+        This ensures synchronization between the application's tracking and Google Drive.
+
+        Decorators:
+        - @async_error_handler(): Handles exceptions during the asynchronous operation.
+        """
         loop = asyncio.get_running_loop()
-        def _update_transcription_status():
+        def _update_workflow_status():
             gfile_id = WorkflowTracker.get('mp3_gfile_id')
             if not gfile_id:
                 return False
             file_to_update = self.drive.CreateFile({'id': gfile_id})
             transcription_info_json = WorkflowTracker.get_model().model_dump_json()
             # The transcription (workflow) status is placed as a json string within the gfile's description field.
-            # This is not ideal, but using labels proved to be way too difficult?
+            # This is not ideal, but using labels proved to be way too confusing/difficult.
             file_to_update['description'] = transcription_info_json
             file_to_update.Upload()
             return True
-
-        if not await loop.run_in_executor(None, _update_transcription_status):
+        # If there is no mp3 file in gdrive with the gfile_id, log an error but don't raise an exception.
+        if not await loop.run_in_executor(None, _update_workflow_status):
             await handle_error(error_message='There was no mp3 gfile id in WorkflowTracker.  Status info is stored within the description field of the mp3 file.',operation='update_transcription_status_in_mp3_gfile', raise_exception=False)
-        return True
+
     @async_error_handler()
     async def upload_mp3_to_gdrive(self, mp3_file_path:Path) -> GDriveInput:
         """
@@ -91,28 +150,46 @@ class GDriveHelper:
         """
         folder_gdrive_id = self.settings.gdrive_mp3_folder_id
         # Returns the gfile id of the mp3 file.
-        gfile_id = await self.upload(GDriveInput(gdrive_id=folder_gdrive_id), mp3_file_path)
+        gfile_id = await self.upload_to_gdrive(GDriveInput(gdrive_id=folder_gdrive_id), mp3_file_path)
         return gfile_id
 
     @async_error_handler(error_message = 'Could not upload the transcript to a gflie.')
     async def upload_transcript_to_gdrive(self,  transcript_text: TranscriptText) -> None:
+        """
+        Asynchronously uploads a transcription text to Google Drive as a text file.
+
+        This method generates a text file from the transcription text, naming it based on the original MP3 file's name with a '.txt' extension.
+        It saves the text file locally before uploading it to the specified Google Drive folder for transcripts. The Google Drive folder is determined by environment settings.
+
+        Parameters:
+        - transcript_text (TranscriptText): The transcription text to be uploaded.
+
+        Raises:
+        - Exception with the message 'Could not upload the transcript to a gflie.' if the upload fails.
+
+        Decorators:
+        - @async_error_handler(): Handles exceptions that may occur during the upload process, providing a specific error message for upload failures.
+        """
+        # Use the name portion of the mp3 filename as the name portion of the transcription file.
         mp3_gfile_id = WorkflowTracker.get('mp3_gfile_id')
         mp3_gfile_input = GDriveInput(gdrive_id=mp3_gfile_id)
         mp3_filename = await self.get_filename(mp3_gfile_input)
+        # Complete the transcription's filename by appending the .txt extension.
         txt_filename = mp3_filename[:-4] + '.txt'
         local_transcript_dir = Path(self.settings.local_transcript_dir)
         local_transcript_dir.mkdir(parents=True, exist_ok=True)
         local_transcript_file_path = local_transcript_dir / txt_filename
+        # Save the transcript locally within the local_transcript_dir defined in the env settings.
         async with aiofiles.open(str(local_transcript_file_path), "w") as temp_file:
             await temp_file.write(str(transcript_text))
         folder_gdrive_id = self.settings.gdrive_transcripts_folder_id
+        # We have a PATH variable that contains the transcript bytes.  Upload to GDrive.
+        transcription_gfile_id = await self.upload_to_gdrive(GDriveInput(gdrive_id=folder_gdrive_id),local_transcript_file_path)
 
-        transcription_gfile_id = await self.upload(GDriveInput(gdrive_id=folder_gdrive_id),local_transcript_file_path)
+        return transcription_gfile_id,local_transcript_file_path
 
-        return transcription_gfile_id,txt_filename
-
-    @async_error_handler(error_message = 'Could not upload the transcript to gdrive transcript folder.')
-    async def upload(self, folder_gdrive_input:GDriveInput, file_path: Path) -> GDriveInput:
+    @async_error_handler(error_message = 'Could not upload the file to GDrive.')
+    async def upload_to_gdrive(self, folder_gdrive_input:GDriveInput, file_path: Path) -> GDriveInput:
         def _upload():
             folder_gdrive_id = folder_gdrive_input.gdrive_id
             gfile = self.drive.CreateFile({'parents': [{'id': folder_gdrive_id}]})
@@ -122,7 +199,6 @@ class GDriveHelper:
             gfile.Upload()
             if hasattr(gfile, 'content') and gfile.content:
                 gfile.content.close()
-            #  TODO: Can remove the local transcript...
             gfile_input = GDriveInput(gdrive_id=gfile['id'])
             gfile_id = gfile_input.gdrive_id
             return gfile_id

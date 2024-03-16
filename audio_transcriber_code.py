@@ -96,7 +96,7 @@ class AudioTranscriber:
             str: The transcribed text.
 
         Raises:
-            -sll errors are handled by the @async_error_handler() decorator.
+            -all errors are handled by the @async_error_handler() decorator.
         """
         gfile_id = None
         input_mp3 = WorkflowTracker.get('input_mp3')
@@ -114,12 +114,24 @@ class AudioTranscriber:
 
         transcription_text = await self.transcribe_mp3()
 
-        await self.update_and_monitor_gdrive_status(status=WorkflowEnum.TRANSCRIPTION_COMPLETE.name,comment= f'Success! First 50 chars: {transcription_text[:50]}')
+        # See if we should delete the temp mp3 file based on the env setting.
+        if self.settings.remove_temp_mp3:
+            local_mp3_path.unlink()
+            self.logger.info(f"Temporary mp3 file {local_mp3_path} deleted successfully.")
+            local_mp3_path = None
 
-        transcript_gfile_id, transcript_filename = await self.gh.upload_transcript_to_gdrive(transcription_text)
+        await self.update_and_monitor_gdrive_status(status=WorkflowEnum.TRANSCRIPTION_COMPLETE.name,local_mp3_path=local_mp3_path, comment= f'Success! First 50 chars: {transcription_text[:50]}')
+
+        transcript_gfile_id, local_transcript_file_path = await self.gh.upload_transcript_to_gdrive(transcription_text)
+
+        # As with the temp mp3 file, delete the temp transcription file if requested to do so based on the env settings.
+        if self.settings.remove_temp_transcription:
+            local_transcript_file_path.unlink()
+            self.logger.info(f"Temporary transcription file {local_transcript_file_path} deleted successfully.")
+            local_transcript_file_path = None
 
         await self.update_and_monitor_gdrive_status(status=WorkflowEnum.TRANSCRIPTION_UPLOAD_COMPLETE.name,
-        transcript_gdrive_id=transcript_gfile_id,transcript_gdrive_filename= transcript_filename,
+        transcript_gdrive_id=transcript_gfile_id,local_transcript_path= local_transcript_file_path,
         comment= 'Transcript available within the transcript folder (unless moved/deleted).')
 
         return transcription_text
@@ -131,16 +143,14 @@ class AudioTranscriber:
 
         This method handles both uploaded files and Google Drive inputs. For an uploaded file,
         it directly saves the file to a local temporary directory. For a Google Drive input,
-        it downloads the file from Google Drive to the local temporary directory. The method
-        updates the workflow tracker with the Google Drive file ID (if applicable) and the
-        name of the local MP3 file.  The mp3 Google Drive ID in particular is used by the
-        workflow to track state of progress.
+        it downloads the file from Google Drive to the local temporary directory.
 
         Parameters:
         - input_file (Union[UploadFile, GDriveInput]): The source of the MP3 file, which can be
         an uploaded file (UploadFile) or a reference to a file stored in Google Drive (GDriveInput).
 
         Returns:
+        - gfile_id: The Google Drive ID of the MP3 file.
         - Path: The path to the local copy of the MP3 file.
 
         Raises:
@@ -154,7 +164,6 @@ class AudioTranscriber:
         elif isinstance(input_mp3, GDriveInput):
             mp3_gfile_id, mp3_path = await self.copy_gfile_to_local_mp3(input_mp3)
 
-
         return mp3_gfile_id, mp3_path
 
     @async_error_handler()
@@ -164,8 +173,7 @@ class AudioTranscriber:
 
         This method takes an uploaded MP3 file, saves it to a specified local directory, and then uploads
         the file to Google Drive. It ensures the file pointer is at the start before reading, to guarantee
-        accurate copying. The method wraps the file saving and uploading process with error handling,
-        setting the workflow status to ERROR upon encountering any exceptions.
+        accurate copying. The method wraps the file saving and uploading process with error handling.
 
         Parameters:
         - upload_file (UploadFile): The uploaded file object provided by FastAPI, which contains
@@ -177,7 +185,7 @@ class AudioTranscriber:
 
         Raises:
         - Exception: Any exception raised during the file saving or uploading process is caught
-        and handled by the `async_error_handler` decorator, which sets the workflow status accordingly.
+        and handled by the `async_error_handler` decorator.
         """
         local_mp3_dir_path = Path(self.settings.local_mp3_dir)
 
@@ -200,9 +208,9 @@ class AudioTranscriber:
         """
         Downloads an MP3 file from Google Drive to the local server directory for processing.
 
-        This function is called when the workflow starts off with a MP3 file stored stored on Google Drive.
-        It makes a local copy of the contents of the file found with the gfile id. The method returns the original
-        Google Drive ID and the local file path, aiding in file tracking and accessibility for the transcription process.
+        This function is called when the workflow starts off with a MP3 file stored on Google Drive.
+        The method returns the original Google Drive ID and the local file path, aiding in file tracking
+        and accessibility for the transcription process.
 
         Args:
             gdrive_input (GDriveInput): The pydantic class that verifies the .gdrive_ID field is a GDrive ID.
@@ -227,7 +235,7 @@ class AudioTranscriber:
     @async_error_handler()
     async def transcribe_mp3(self) -> str:
         """
-        Transcribes a local MP3 file to text using the Whisper API based on specified options.
+        Transcribes a local MP3 file to text using the Whisper API based on audio quality and compute type options.
         Utilizes audio quality and compute type from `options` to tailor the transcription process.
         Updates the workflow tracker to indicate transcription start, relying on a Google Drive file ID if available.
 
@@ -244,28 +252,6 @@ class AudioTranscriber:
 
         # Proceed with transcription using the validated options
         self.logger.debug(f"Transcribing file path: {WorkflowTracker.get('local_mp3_path')} with quality {WorkflowTracker.get('transcript_audio_quality')} and compute type {WorkflowTracker.get('transcript_compute_type')}")
-        transcription_text = await self.whisper_transcribe()
-
-        return transcription_text
-
-
-
-    @async_error_handler()
-    async def whisper_transcribe(self) -> str:
-        """
-        Performs audio transcription using the Whisper model, tailored by audio quality and compute type.
-
-        This method is decorated with an error handler to update the workflow status to `TRANSCRIPTION_FAILED` upon encountering any issues. It leverages the Whisper model to convert audio from an MP3 file to text, utilizing the audio quality and compute type specified in `options`. The workflow tracker is updated at the start and upon completion of the transcription process.
-
-        Args:
-            options (TranscriptionOptionsWithPath): Configuration for the transcription process, including the path to the MP3 file, audio quality, and compute type.
-
-        Returns:
-            str: The transcribed text from the MP3 file.
-
-        Insight:
-        Central to the transcription workflow, this method directly interacts with the transcription model, reflecting the process's start, ongoing status, and completion in the workflow tracker. The choice of model and compute type allows for customizable transcription fidelity and performance.
-        """
         audio_quality_text_representation = WorkflowTracker.get('transcript_audio_quality')
         compute_type_text_representation = WorkflowTracker.get('transcript_compute_type')
         hf_model_name = AUDIO_QUALITY_MAP.get(audio_quality_text_representation,"default")
@@ -286,8 +272,6 @@ class AudioTranscriber:
     @async_error_handler()
     async def _transcribe_pipeline(self, audio_filename: str, model_name: str, compute_float_type: torch.dtype) -> str:
         """
-        Transcribes an audio file to text using a Hugging Face ASR model, considering model specifics and compute optimization.
-
         This method employs the Hugging Face `pipeline` for automatic speech recognition (ASR), specifying the model based on audio quality (model_name) and optimizing computation with the provided `compute_float_type`. It is designed to handle heavy lifting of audio processing in an asynchronous workflow, ensuring non-blocking operation in the main event loop.
 
         Args:
@@ -298,7 +282,6 @@ class AudioTranscriber:
         Returns:
             str: The transcribed text from the audio file.
 
-        Insight:
         It's wrapped with an async error handler to gracefully handle failures, marking the transcription phase as failed in such events. The method encapsulates model loading and execution within a synchronous function, offloading it to an executor to maintain async workflow integrity.
         """
         self.logger.debug("Transcribe using HF's Transformer pipeline (_transcribe_pipeline)...LOADING MODEL")
@@ -315,7 +298,32 @@ class AudioTranscriber:
         result = await loop.run_in_executor(None, load_and_run_pipeline)
         return result['text']
 
-    async def update_and_monitor_gdrive_status(self, status, comment=None, mp3_gfile_id=None, local_mp3_path=None, transcript_audio_quality=None, transcript_compute_type=None, transcript_gdrive_id=None, transcript_gdrive_filename=None):
+    async def update_and_monitor_gdrive_status(self, status, comment=None, mp3_gfile_id=None, local_mp3_path=None, transcript_audio_quality=None, transcript_compute_type=None, transcript_gdrive_id=None, local_transcript_path=None):
+        """
+        Asynchronously updates the transcription workflow status and monitors Google Drive (gDrive) status changes.
+
+        This method updates the transcription workflow status in the WorkflowTracker and optionally updates the
+        Google Drive file's description with the current status and comments. It is used at various stages of the
+        transcription process to track progress, such as when the MP3 is uploaded, transcription starts, and
+        transcription is completed. Additionally, it updates the Google Drive file's status and optionally triggers
+        monitoring for status changes.
+
+        Parameters:
+        - status (str): The current status of the transcription process to be updated in the WorkflowTracker and optionally in the gDrive file's description.
+        - comment (Optional[str]): Additional details about the current status, which can be appended to the gDrive file's description.
+        - mp3_gfile_id (Optional[str]): The Google Drive file ID of the MP3 file. Required if updating the file's description in gDrive.
+        - local_mp3_path (Optional[Path]): The local path to the MP3 file. This is tracked in the WorkflowTracker for reference but not directly used in this method.
+        - transcript_audio_quality (Optional[str]): The audio quality setting used for the transcription. This is tracked in the WorkflowTracker for reference.
+        - transcript_compute_type (Optional[str]): The compute type setting used for the transcription. This is tracked in the WorkflowTracker for reference.
+        - transcript_gdrive_id (Optional[str]): The Google Drive file ID of the transcript file. This is tracked in the WorkflowTracker for reference.
+        - local_transcript_path (Optional[str]): The filename of the transcript in Google Drive. This is tracked in the WorkflowTracker for reference.
+
+        Raises:
+        - This method is decorated with `@async_error_handler()`, which handles any exceptions that occur during its execution.
+
+        Note:
+        This method primarily updates the internal state of the workflow and optionally interacts with Google Drive to update the file's description based on the provided parameters. It leverages the `GDriveHelper` and `monitor_status_update` utilities to perform Google Drive interactions and monitoring, respectively.
+        """
         # Prepare the keyword arguments for updating the WorkflowTracker
         update_kwargs = {
             'status': status,
@@ -325,7 +333,7 @@ class AudioTranscriber:
             'transcript_audio_quality': transcript_audio_quality,
             'transcript_compute_type': transcript_compute_type,
             'transcript_gdrive_id': transcript_gdrive_id,
-            'transcript_gdrive_filename': transcript_gdrive_filename
+            'local_transcript_path': local_transcript_path
         }
         # Filter out None values
         filtered_kwargs = {k: v for k, v in update_kwargs.items() if v is not None}

@@ -2,12 +2,9 @@
 # Author: HappyDay Johnson
 # Version: 0.01
 # Date: 2024-03-20
-# Summary: This test suite tests the functionality and completeness of the audio_transcriber system.
-# The main focus is on its ability to accurately transcribe audio
-# files, interact seamlessly with Google Drive for file operations, and correctly update
-# and track transcription statuses. It tests the end-to-end transcription workflow,
-# including direct uploads, Google Drive interactions, environment configuration handling,
-# and the system's capacity to manage file statuses within Google Drive.
+# Summary: This test suite tests the functionality and completeness obackground processing
+# of mp3 files within the GDrive folder containing the mp3 files as defined within the
+# environmental settings.
 #
 # License Information: MIT License
 #
@@ -31,7 +28,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 ###########################################################################################
-
 from io import BytesIO
 from pathlib import Path
 
