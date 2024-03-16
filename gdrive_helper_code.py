@@ -190,6 +190,23 @@ class GDriveHelper:
 
     @async_error_handler(error_message = 'Could not upload the file to GDrive.')
     async def upload_to_gdrive(self, folder_gdrive_input:GDriveInput, file_path: Path) -> GDriveInput:
+        """
+        Asynchronously uploads a file to Google Drive, placing it within a specified folder.
+
+        This method uploads a local file to a designated Google Drive folder and returns
+        the Google Drive file ID of the uploaded file.
+
+        Parameters:
+            folder_gdrive_input (GDriveInput): The Google Drive folder ID where the file will be uploaded.
+            file_path (Path): The local path of the file to be uploaded.
+
+        Returns:
+            GDriveInput: An instance containing the Google Drive file ID of the uploaded file.
+
+        Raises:
+            Exception: Uses the @async_error_handler decorator to handle exceptions.
+        """
+
         def _upload():
             folder_gdrive_id = folder_gdrive_input.gdrive_id
             gfile = self.drive.CreateFile({'parents': [{'id': folder_gdrive_id}]})
@@ -208,6 +225,23 @@ class GDriveHelper:
 
     @async_error_handler(error_message = 'Could not download_from_gdrive.')
     async def download_from_gdrive(self, gdrive_input:GDriveInput, directory_path: Path):
+        """
+        Asynchronously downloads a file from Google Drive to a specified local directory.
+
+        This method retrieves a file from Google Drive using its file ID and saves it to
+        a local directory.
+
+        Parameters:
+            gdrive_input (GDriveInput): An instance containing the Google Drive file ID of the file to be downloaded.
+            directory_path (Path): The local directory path where the downloaded file will be saved.
+
+        Returns:
+            Path: The path to the locally saved file, constructed from the specified directory path and the file's name.
+
+        Raises:
+            Exception: Uses the @async_error_handler decorator to handle exceptions.
+        """
+
         loop = asyncio.get_running_loop()
         def _download():
             gfile = self.drive.CreateFile({'id': gdrive_input.gdrive_id})
@@ -222,6 +256,23 @@ class GDriveHelper:
 
     @async_error_handler(error_message = 'Could not get the filename of the gfile.')
     async def get_filename(self, gfile_input:GDriveInput) -> str:
+        """
+        Asynchronously retrieves the filename of a Google Drive file using its file ID.
+
+        This method fetches and returns the name of a file stored in Google Drive, identified
+        by its Google Drive file ID. It performs this operation asynchronously, facilitating
+        efficient retrieval without blocking the application's execution flow.
+
+        Parameters:
+            gfile_input (GDriveInput): An instance containing the Google Drive file ID.
+
+        Returns:
+            str: The filename of the Google Drive file.
+
+        Raises:
+            Exception: Uses the @async_error_handler decorator to handle exceptions.
+        """
+
         gfile_id = gfile_input.gdrive_id
         loop = asyncio.get_running_loop()
         def _get_filename():
@@ -236,6 +287,26 @@ class GDriveHelper:
 
     @async_error_handler(error_message = 'Could not fetch the transcription status from the description field of the gfile.')
     async def get_status_field(self, gdrive_input: GDriveInput) -> Union[dict, None]:
+        """
+        Asynchronously retrieves the transcription status from a Google Drive file's description field.
+
+        This method fetches the transcription status, encoded as a JSON string, from the
+        description field of a specified Google Drive file. It decodes the JSON string into
+        a dictionary and updates the WorkflowTracker with this information. If the file lacks
+        a description by getting a KeyError exception (indicative of a newly added i.e.: untracked file),
+        it initializes the description with the current state of the WorkflowTracker.
+
+        Parameters:
+            gdrive_input (GDriveInput): An instance containing the Google Drive file ID.
+
+        Returns:
+            None: This method updates the WorkflowTracker directly and does not return a value.
+
+        Raises:
+            Exception: KeyError exception is handled as missing the WorkflowTracker status info.  All other
+            exceptions use the @async_error_handler decorator to handle exceptions.
+        """
+
         gfile_id = gdrive_input.gdrive_id
         loop = asyncio.get_running_loop()
 
@@ -261,6 +332,24 @@ class GDriveHelper:
 
     @async_error_handler(error_message = 'Could not get a list of mp3 files from the GDrive ID.')
     async def list_files_to_transcribe(self, gdrive_folder_id: str) -> list:
+        """
+        Asynchronously retrieves a list of MP3 files from a specified Google Drive folder.
+
+        This method queries a Google Drive folder for all files (excluding those in the trash)
+        and compiles a list of these files to be transcribed. It is designed to facilitate the
+        batch processing of audio files for transcription by identifying all potential candidates
+        within a given folder.
+
+        Parameters:
+            gdrive_folder_id (str): The Google Drive folder ID from which to retrieve MP3 files.
+
+        Returns:
+            list: A list of Google Drive file objects representing MP3 files ready for transcription.
+
+        Raises:
+            Exception: If the list of MP3 files could not be retrieved, with a custom error message.
+        """
+
         loop = asyncio.get_running_loop()
         def _get_file_info():
             # Assuming get_gfile_state is properly defined as an async function
@@ -275,5 +364,15 @@ class GDriveHelper:
 
     @async_error_handler(error_message = 'Error attempting to delete gfile.')
     async def delete_file(self, file_id: str):
+        """
+        Asynchronously deletes a file from Google Drive using its file ID
+
+        Parameters:
+            file_id (str): The unique identifier of the file to be deleted from Google Drive.
+
+        Raises:
+            Exception: Uses the @async_error_handler decorator to handle exceptions (i.e.: gfile could not be deleted).
+        """
+
         file = self.drive.CreateFile({'id': file_id})
         file.Delete()
