@@ -26,7 +26,7 @@ async def main(delete_after_upload=False):
 
     for file in files_to_process:
         gdrive_input = GDriveInput(gdrive_id=file['id'])
-        status_model = await gh.get_status_field(gdrive_input)
+        status_model = await gh.get_status_dict(gdrive_input)
         logger.warning(f"\n---------\n {status_model.model_dump_json(indent=4)}")
         if status_model.status == WorkflowEnum.TRANSCRIPTION_UPLOAD_COMPLETE.name and delete_after_upload:
             await gh.delete_file(file['id'])

@@ -6,7 +6,7 @@ from logger_code import LoggerBase
 from workflow_tracker_code import WorkflowTracker
 
 @async_error_handler()
-async def update_and_monitor_gdrive_status(gdrive_handle, status, comment=None, mp3_gfile_id=None, local_mp3_path=None, transcript_audio_quality=None, transcript_compute_type=None, transcript_gdrive_id=None, local_transcript_path=None):
+async def update_and_monitor_gdrive_status(gh, status, comment=None, mp3_gfile_id=None, local_mp3_path=None, transcript_audio_quality=None, transcript_compute_type=None, transcript_gdrive_id=None, local_transcript_path=None):
     """
     Asynchronously updates the transcription workflow status and monitors Google Drive (gDrive) status changes.
 
@@ -48,8 +48,8 @@ async def update_and_monitor_gdrive_status(gdrive_handle, status, comment=None, 
 
     # Update the WorkflowTracker
     WorkflowTracker.update(**filtered_kwargs)
-    if mp3_gfile_id and gdrive_handle:
-        await gdrive_handle.update_mp3_gfile_status()
+    if mp3_gfile_id and gh:
+        await gh.update_mp3_gfile_status()
     await monitor_status_update()
 
 @async_error_handler()

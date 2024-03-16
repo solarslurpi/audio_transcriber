@@ -37,7 +37,6 @@
 from pathlib import Path
 import asyncio
 import json
-from typing import Union
 
 import aiofiles
 from pydrive2.auth import GoogleAuth
@@ -284,7 +283,7 @@ class GDriveHelper:
         return verified_filename.filename
 
     @async_error_handler(error_message = 'Could not fetch the transcription status from the description field of the gfile.')
-    async def get_status_field(self, gdrive_input: GDriveInput) -> dict:
+    async def get_status_dict(self, gdrive_input: GDriveInput) -> dict:
         """
         Asynchronously retrieves the transcription status from a Google Drive file's description field.
 
@@ -300,7 +299,7 @@ class GDriveHelper:
             gdrive_input (GDriveInput): An instance containing the Google Drive file ID.
 
         Returns:
-            dict: The info in the description field as the status info dictionary.
+            dict: A dump of the WorkflowTracker instance as a dict since the contents of this instance is synchronized with the gfile.
 
         Raises:
             Exception: Uses the @async_error_handler decorator to handle exceptions.
@@ -309,27 +308,19 @@ class GDriveHelper:
         gfile_id = gdrive_input.gdrive_id
         loop = asyncio.get_running_loop()
 
-        def _get_status_field() -> Union[dict, None]:
+        def _get_status_dict() -> str:
             file_metadata = self.drive.CreateFile({'id': gfile_id})
             description = file_metadata.get('description', '{}')
+            status_dict = json.loads(description)
+            return status_dict
 
-            status_info = json.loads(description)
-            status = status_info.get('status', 'unknown')
-            if  status == 'unknown':
-                # There is no workflow status. This can happen if the mp3 file was placed in the GDrive
-                # directory for batch transcription (for example).
-                update_and_monitor_gdrive_status(status=WorkflowEnum.NOT_STARTED.name,comment="New file available for transcription.",mp3_gfile_id=gfile_id)
-                # Let's reload the gfile and return the description status field.
-                file_metadata = self.drive.CreateFile({'id': gfile_id})
-                description = file_metadata.get('description', '{}')
-
-                status_info = json.loads(description)
-
-            # Other errors handled by the error handling decorator.
-            return status_info
-
-        await loop.run_in_executor(None, _get_status_field)
-        return
+        status_dict = await loop.run_in_executor(None, _get_status_dict)
+        status = status_dict.get('status','unknown')
+        if  not status or status == 'unknown':
+            # Say an mp3 file was placed in the folder.
+            # Put the properties within the WorkflowTracker instance
+            await update_and_monitor_gdrive_status(self, status=WorkflowEnum.NOT_STARTED.name,comment="New file available for transcription.",mp3_gfile_id=gfile_id)
+        return WorkflowTracker.get_model().model_dump()
 
     @async_error_handler(error_message = 'Could not get a list of mp3 files from the GDrive ID.')
     async def list_files_to_transcribe(self, gdrive_folder_id: str) -> list:

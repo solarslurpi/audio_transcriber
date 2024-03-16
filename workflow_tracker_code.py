@@ -172,7 +172,3 @@ class WorkflowTracker:
     @classmethod
     def get_model(cls):
         return cls._model
-
-    @classmethod
-    def get_model_dump(cls):
-        return cls._model.model_dump()

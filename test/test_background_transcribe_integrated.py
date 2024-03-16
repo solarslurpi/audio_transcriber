@@ -33,18 +33,26 @@ import pytest
 
 from env_settings_code import get_settings
 from gdrive_helper_code import GDriveHelper  # Adjust the import path according to your project structure
+from pydantic_models import GDriveInput
 
 @pytest.fixture
 def mp3_gdrive_id():
     settings = get_settings()
     return settings.gdrive_mp3_folder_id
 
+@pytest.fixture
+def gh():
+    gh = GDriveHelper()
+    return gh
+
 @pytest.mark.asyncio
-async def test_workflow_status_in_gdrive_files(mp3_gdrive_id):
-    gdrive_helper = GDriveHelper()  # Ensure GDriveHelper is properly initialized for the test
-    files_to_transcribe = await gdrive_helper.list_files_to_transcribe(mp3_gdrive_id)
+async def test_workflow_status_in_gdrive_files(gh, mp3_gdrive_id):
+    files_to_transcribe = await gh.list_files_to_transcribe(mp3_gdrive_id)
 
     for gfile in files_to_transcribe:
+        gfile_id = gfile.get('id')
+        gfile_input = GDriveInput(gdrive_id=gfile_id)
         # Assuming gfile is an instance containing the Google Drive file ID and other metadata
-        status_info = gdrive_helper.get_status_field(gfile)
+        status_info = await gh.get_status_dict(gfile_input)
+        assert status_info is not None
         print(f"The status of this gfile is: {status_info['status']}")
