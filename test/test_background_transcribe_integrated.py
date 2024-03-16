@@ -28,21 +28,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 ###########################################################################################
+
 import pytest
 
 from env_settings_code import get_settings
+from gdrive_helper_code import GDriveHelper  # Adjust the import path according to your project structure
+
+@pytest.fixture
+def mp3_gdrive_id():
+    settings = get_settings()
+    return settings.gdrive_mp3_folder_id
 
 @pytest.mark.asyncio
-async def test_get_mp3_gdrive_file_list():
-    settings = get_settings()
-    mp3_gdrive_folder = settings.gdrive_mp3_folder_id
-    # Read the first few bytes to check if the file has content
-    assert valid_UploadFile,UploadFile
-    content = await valid_UploadFile.read(10)  # Read the first 10 bytes
-    # Check if anything was read
-    if content:
-        print("The file has content.")
-    else:
-        print("The file is empty.")
-    # Reset the pointer to the beginning of the file for future reads
-    await valid_UploadFile.seek(0)
+async def test_workflow_status_in_gdrive_files(mp3_gdrive_id):
+    gdrive_helper = GDriveHelper()  # Ensure GDriveHelper is properly initialized for the test
+    files_to_transcribe = await gdrive_helper.list_files_to_transcribe(mp3_gdrive_id)
+
+    for gfile in files_to_transcribe:
+        # Assuming gfile is an instance containing the Google Drive file ID and other metadata
+        status_info = gdrive_helper.get_status_field(gfile)
+        print(f"The status of this gfile is: {status_info['status']}")

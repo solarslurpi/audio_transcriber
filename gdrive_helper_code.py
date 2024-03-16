@@ -49,9 +49,8 @@ from env_settings_code import get_settings
 from logger_code import LoggerBase
 from workflow_error_code import handle_error, async_error_handler
 from pydantic_models import GDriveInput, TranscriptText, MP3filename
-
-
-
+from workflow_states_code import WorkflowEnum
+from status_update_code import update_and_monitor_gdrive_status
 
 class GDriveHelper:
     """
@@ -72,7 +71,6 @@ class GDriveHelper:
         self.logger = LoggerBase.setup_logger()
         self.gauth = self._login_with_service_account()
         self.drive = GoogleDrive(self.gauth)
-
 
     def _login_with_service_account(self):
         """
@@ -286,12 +284,14 @@ class GDriveHelper:
         return verified_filename.filename
 
     @async_error_handler(error_message = 'Could not fetch the transcription status from the description field of the gfile.')
-    async def get_status_field(self, gdrive_input: GDriveInput) -> Union[dict, None]:
+    async def get_status_field(self, gdrive_input: GDriveInput) -> dict:
         """
         Asynchronously retrieves the transcription status from a Google Drive file's description field.
 
         This method fetches the transcription status, encoded as a JSON string, from the
-        description field of a specified Google Drive file. It decodes the JSON string into
+        description field of a specified Google Drive file. It decodes the JSON string and determines
+        if the description has been "converted" to a json string of WorkflowStatus info. If not, the
+        description field of the gfile is updated.
         a dictionary and updates the WorkflowTracker with this information. If the file lacks
         a description by getting a KeyError exception (indicative of a newly added i.e.: untracked file),
         it initializes the description with the current state of the WorkflowTracker.
@@ -300,32 +300,33 @@ class GDriveHelper:
             gdrive_input (GDriveInput): An instance containing the Google Drive file ID.
 
         Returns:
-            None: This method updates the WorkflowTracker directly and does not return a value.
+            dict: The info in the description field as the status info dictionary.
 
         Raises:
-            Exception: KeyError exception is handled as missing the WorkflowTracker status info.  All other
-            exceptions use the @async_error_handler decorator to handle exceptions.
+            Exception: Uses the @async_error_handler decorator to handle exceptions.
         """
 
         gfile_id = gdrive_input.gdrive_id
         loop = asyncio.get_running_loop()
 
         def _get_status_field() -> Union[dict, None]:
-            gfile = self.drive.CreateFile({'id': gfile_id})
-            gfile.FetchMetadata(fields="description")
+            file_metadata = self.drive.CreateFile({'id': gfile_id})
+            description = file_metadata.get('description', '{}')
 
-            try:
-                transcription_status_json = gfile['description']
-                transcription_status_dict = json.loads(transcription_status_json)
-                # Update the WorkflowTracker model with the parsed dictionary
-                WorkflowTracker.update(**transcription_status_dict)
-            except KeyError:
-                # An mp3 file just placed in the mp3 GDrive dir will not have a description field. This check creates one if this is the case.
-                transcription_status_json = WorkflowTracker.get_model().model_dump_json()
-                gfile['description'] = transcription_status_json
-                gfile.Upload()
+            status_info = json.loads(description)
+            status = status_info.get('status', 'unknown')
+            if  status == 'unknown':
+                # There is no workflow status. This can happen if the mp3 file was placed in the GDrive
+                # directory for batch transcription (for example).
+                update_and_monitor_gdrive_status(status=WorkflowEnum.NOT_STARTED.name,comment="New file available for transcription.",mp3_gfile_id=gfile_id)
+                # Let's reload the gfile and return the description status field.
+                file_metadata = self.drive.CreateFile({'id': gfile_id})
+                description = file_metadata.get('description', '{}')
+
+                status_info = json.loads(description)
+
             # Other errors handled by the error handling decorator.
-            return # WorkflowTracker is a singleton.
+            return status_info
 
         await loop.run_in_executor(None, _get_status_field)
         return
