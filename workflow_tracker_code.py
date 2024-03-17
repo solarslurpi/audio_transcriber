@@ -79,8 +79,7 @@ class WorkflowTrackerModel(BaseModel):
     def serialize_local_mp3_path(self, local_mp3_path: Path):
         if local_mp3_path:
             return str(local_mp3_path.name)
-        else:
-            return None
+        return None
 
     @field_validator("local_mp3_path")
     @classmethod

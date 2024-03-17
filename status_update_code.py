@@ -48,7 +48,7 @@ async def update_and_monitor_gdrive_status(gh, status, comment=None, mp3_gfile_i
 
     # Update the WorkflowTracker
     WorkflowTracker.update(**filtered_kwargs)
-    if mp3_gfile_id and gh:
+    if gh and WorkflowTracker.get('mp3_gfile_id'):
         await gh.update_mp3_gfile_status()
     await monitor_status_update()
 
@@ -70,7 +70,7 @@ async def monitor_status_update():
             return counts[status]
 
         return counter
-    # This function uses the closure for tracking status repeats
+
     def _monitor_status_update_repeat(state):
         # Call the counter with the current status to increment its count
         status_repeat_counter = _statusRepeatCounter()

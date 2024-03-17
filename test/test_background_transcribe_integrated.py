@@ -34,6 +34,8 @@ import pytest
 from env_settings_code import get_settings
 from gdrive_helper_code import GDriveHelper  # Adjust the import path according to your project structure
 from pydantic_models import GDriveInput
+from workflow_tracker_code import WorkflowTracker
+from logger_code import LoggerBase
 
 @pytest.fixture
 def mp3_gdrive_id():
@@ -45,14 +47,23 @@ def gh():
     gh = GDriveHelper()
     return gh
 
+@pytest.fixture
+def logger():
+    logger = LoggerBase.setup_logger('test_batch_transcribing')
+    return logger
+
 @pytest.mark.asyncio
-async def test_workflow_status_in_gdrive_files(gh, mp3_gdrive_id):
+async def test_workflow_status_in_gdrive_files(gh, mp3_gdrive_id,logger):
     files_to_transcribe = await gh.list_files_to_transcribe(mp3_gdrive_id)
 
     for gfile in files_to_transcribe:
         gfile_id = gfile.get('id')
         gfile_input = GDriveInput(gdrive_id=gfile_id)
         # Assuming gfile is an instance containing the Google Drive file ID and other metadata
-        status_info = await gh.get_status_dict(gfile_input)
-        assert status_info is not None
-        print(f"The status of this gfile is: {status_info['status']}")
+        await gh.sync_workflowTracker_from_gfile_description(gfile_input)
+        logger.warning(f"\n---------\n {WorkflowTracker.get_model().model_dump_json(indent=4)}")
+
+
+@pytest.mark.asyncio
+async def test_batch_transcribing():
+    pass

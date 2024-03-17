@@ -283,44 +283,49 @@ class GDriveHelper:
         return verified_filename.filename
 
     @async_error_handler(error_message = 'Could not fetch the transcription status from the description field of the gfile.')
-    async def get_status_dict(self, gdrive_input: GDriveInput) -> dict:
+    async def sync_workflowTracker_from_gfile_description(self, gdrive_input: GDriveInput) -> dict:
         """
-        Asynchronously retrieves the transcription status from a Google Drive file's description field.
+        Synchronizes the state of a WorkflowTracker instance with the JSON-encoded description field of a specified Google Drive file.
 
-        This method fetches the transcription status, encoded as a JSON string, from the
-        description field of a specified Google Drive file. It decodes the JSON string and determines
-        if the description has been "converted" to a json string of WorkflowStatus info. If not, the
-        description field of the gfile is updated.
-        a dictionary and updates the WorkflowTracker with this information. If the file lacks
-        a description by getting a KeyError exception (indicative of a newly added i.e.: untracked file),
-        it initializes the description with the current state of the WorkflowTracker.
+        This method attempts to fetch and decode a JSON string from the description field of a Google Drive file identified by `gdrive_input`. The JSON string is expected to represent the current state of a WorkflowTracker. The method updates an existing WorkflowTracker instance to reflect this state, or initializes a new state in the description if it is missing or if the workflow status is 'unknown'.
 
         Parameters:
-            gdrive_input (GDriveInput): An instance containing the Google Drive file ID.
+            gdrive_input (GDriveInput): An object containing the ID of the Google Drive file to be synchronized.
 
         Returns:
-            dict: A dump of the WorkflowTracker instance as a dict since the contents of this instance is synchronized with the gfile.
+            dict: The updated state of the WorkflowTracker instance, represented as a dictionary. This state is synchronized with the Google Drive file's description.
 
         Raises:
-            Exception: Uses the @async_error_handler decorator to handle exceptions.
+            Exception: Uses the @async_error_handler decorator to manage exceptions, particularly for cases where synchronization fails due to issues fetching the file's description or parsing the JSON data.
         """
 
         gfile_id = gdrive_input.gdrive_id
         loop = asyncio.get_running_loop()
 
-        def _get_status_dict() -> str:
+        def _get_stored_workflowTracker() -> str:
             file_metadata = self.drive.CreateFile({'id': gfile_id})
+            # Fetch metadata for the file
+            file_metadata.FetchMetadata(fields='description')
             description = file_metadata.get('description', '{}')
-            status_dict = json.loads(description)
-            return status_dict
+            workflowTracker_dict = json.loads(description)
+            return workflowTracker_dict
 
-        status_dict = await loop.run_in_executor(None, _get_status_dict)
-        status = status_dict.get('status','unknown')
+        workflowTracker_dict = await loop.run_in_executor(None, _get_stored_workflowTracker)
+        # Add the gdrive_input to workflowTracker_dict.
+        workflowTracker_dict['input_mp3'] = gdrive_input
+        status = workflowTracker_dict.get('status','unknown')
         if  not status or status == 'unknown':
             # Say an mp3 file was placed in the folder.
             # Put the properties within the WorkflowTracker instance
             await update_and_monitor_gdrive_status(self, status=WorkflowEnum.NOT_STARTED.name,comment="New file available for transcription.",mp3_gfile_id=gfile_id)
-        return WorkflowTracker.get_model().model_dump()
+        else:
+            # ignore the local paths
+            workflowTracker_dict.pop('local_mp3_path', None)  # Remove the key, prevent KeyError if not exists
+            workflowTracker_dict.pop('local_transcription_path',None)
+            WorkflowTracker.update(**workflowTracker_dict)
+        # Make sure to return the actual values in the WorkflowTracker instance as a dict.
+        workflow_dict = WorkflowTracker.get_model().model_dump()
+        return workflow_dict
 
     @async_error_handler(error_message = 'Could not get a list of mp3 files from the GDrive ID.')
     async def list_files_to_transcribe(self, gdrive_folder_id: str) -> list:

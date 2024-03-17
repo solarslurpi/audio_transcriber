@@ -110,7 +110,7 @@ class AudioTranscriber:
         # First load the mp3 file (either a GDrive file or uploaded) into a local temporary file
         mp3_gfile_id, local_mp3_path = await self.create_local_mp3_from_input()
 
-        await update_and_monitor_gdrive_status(self.gh,status = WorkflowEnum.MP3_UPLOADED.name,mp3_gfile_id = mp3_gfile_id,local_mp3_path = local_mp3_path)
+        await update_and_monitor_gdrive_status(self.gh,status = WorkflowEnum.MP3_UPLOADED.name,mp3_gfile_id = mp3_gfile_id,local_mp3_path = local_mp3_path,comment="mp3 file uploaded")
 
         transcription_text = await self.transcribe_mp3()
 
@@ -251,7 +251,7 @@ class AudioTranscriber:
         """
 
         # Proceed with transcription using the validated options
-        self.logger.debug(f"Transcribing file path: {WorkflowTracker.get('local_mp3_path')} with quality {WorkflowTracker.get('transcript_audio_quality')} and compute type {WorkflowTracker.get('transcript_compute_type')}")
+        self.logger.debug(f"Transcribing file path: {WorkflowTracker.get('local_mp3_path')} ")
         audio_quality_text_representation = WorkflowTracker.get('transcript_audio_quality')
         compute_type_text_representation = WorkflowTracker.get('transcript_compute_type')
         hf_model_name = AUDIO_QUALITY_MAP.get(audio_quality_text_representation,"default")
@@ -259,8 +259,7 @@ class AudioTranscriber:
 
         self.logger.debug(f"Starting transcription with model: {hf_model_name} and compute type: {compute_type_pytorch}")
 
-        await update_and_monitor_gdrive_status(self.gh, status=WorkflowEnum.TRANSCRIBING.name,transcript_audio_quality=hf_model_name, transcript_compute_type=compute_type_text_representation,
-        comment= f'Start by loading the whisper {hf_model_name} model.')
+        await update_and_monitor_gdrive_status(self.gh, status=WorkflowEnum.TRANSCRIBING.name,transcript_audio_quality=hf_model_name, transcript_compute_type=str(compute_type_pytorch), comment= f'Start by loading the whisper {hf_model_name} model.')
 
         transcription_text = ""
         audio_file_path = WorkflowTracker.get('local_mp3_path')
