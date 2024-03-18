@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Author: Happyday
+# Version: 0.01 , 03/2024
+
+# Description
+# Convert video files of any format supported by ffmpeg into MP3 audio format that works best for ASR apps that use the Whisper model.
+
+# Usage
+# ./to_mp3 <filename> <input dir> <output dir>
+# <filename>: Required. The video file to be converted, including its extension.
+# <input_directory>: Optional. Directory where the video file is located. Change the default to your directory.
+# <output_directory>: Optional. Destination directory for the MP3 file; Change the default to yours.
+#####################################
+
+# Check if a filename is provided
+if [ -z "$1" ]; then
+    echo "Error: Filename required."
+    exit 1
+fi
+
+# Set default input directory and override if the second argument is provided
+InputDir="/home/happy/Downloads" # Adjust to your Linux path as needed
+if [ ! -z "$2" ]; then
+    InputDir="$2"
+fi
+
+# Set the output directory to the specified path
+OutputDir="/mnt/My Drive/Audios_To_Knowledge/mp3_files" # Ensure this path is correct for your environment
+
+# Check if the input file exists
+if [ ! -f "${InputDir}/$1" ]; then
+    echo "Error: Input file does not exist: '${InputDir}/$1'"
+    exit 2
+fi
+
+# Check if the output directory exists, exit with error if it doesn't
+if [ ! -d "$OutputDir" ]; then
+    echo "Error: Output directory does not exist: '$OutputDir'"
+    exit 3
+fi
+
+# Proceed with conversion, ensuring paths with spaces are handled correctly
+echo "Converting '${InputDir}/$1' to MP3 format..."
+ffmpeg -i "${InputDir}/$1" -vn -ar 16000 -ac 1 -acodec libmp3lame -q:a 0 "${OutputDir}/$(basename "$1" .${1##*.}).mp3"
+
+if [ $? -ne 0 ]; then
+    echo "Error: Conversion failed."
+    exit 4
+else
+    echo "Success: Conversion completed."
+fi
+
+exit 0

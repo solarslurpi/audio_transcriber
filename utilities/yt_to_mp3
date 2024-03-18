@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Author: Happyday
+# Version: 0.01, 03/2024
+
+# Description:
+# Download YouTube video audio in MP3 format, optimized for ASR applications using the Whisper model.
+# Allows specifying an output directory for the downloaded MP3.
+
+# Usage:
+# ./download_to_mp3.sh <YouTube URL> [output directory]
+# <YouTube URL>: Required. The full URL of the YouTube video.
+# [output directory]: Optional. Destination directory for the MP3 file. Defaults to "/mnt/My Drive/Audios_To_Knowledge/mp3_files" if not specified.
+
+# Check if YouTube URL is provided
+if [ -z "$1" ]; then
+    echo "Error: YouTube URL required."
+    exit 1
+fi
+
+# Set default output directory to a specific path, override if the second argument is provided
+OutputDir="/g/My Drive/Audios_To_Knowledge/mp3_files"
+ # Default to specified directory
+if [ ! -z "$2" ]; then
+    OutputDir="$2"
+fi
+
+# Ensure the output directory exists
+if [ ! -d "$OutputDir" ]; then
+    echo "Error: Output directory does not exist: '$OutputDir'"
+    exit 2
+fi
+
+# Format output path ensuring trailing slash
+OutputPath=$(realpath "$OutputDir")/
+
+# Confirm the operation
+echo "Downloading audio from '$1' to MP3 format in '$OutputPath'"
+
+# Run yt-dlp to download the audio as MP3 to the specified output directory
+yt-dlp -x --audio-format mp3 --audio-quality 0 --postprocessor-args "-ar 16000 -ac 1" -o "${OutputPath}%(title)s.%(ext)s" "$1"
+
+# Check if yt-dlp succeeded
+if [ $? -ne 0 ]; then
+    echo "Error: Download or conversion failed."
+    exit 3
+else
+    echo "Success: Download and conversion completed."
+fi
+
+exit 0

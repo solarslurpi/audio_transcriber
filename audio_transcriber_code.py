@@ -47,6 +47,7 @@ from pydantic_models import (
                              GDriveInput,
                              validate_upload_file)
 from workflow_states_code import WorkflowEnum
+
 from workflow_tracker_code import WorkflowTracker, AUDIO_QUALITY_MAP, COMPUTE_TYPE_MAP
 from workflow_error_code import async_error_handler
 from status_update_code import update_and_monitor_gdrive_status
@@ -254,12 +255,13 @@ class AudioTranscriber:
         self.logger.debug(f"Transcribing file path: {WorkflowTracker.get('local_mp3_path')} ")
         audio_quality_text_representation = WorkflowTracker.get('transcript_audio_quality')
         compute_type_text_representation = WorkflowTracker.get('transcript_compute_type')
-        hf_model_name = AUDIO_QUALITY_MAP.get(audio_quality_text_representation,"default")
-        compute_type_pytorch = COMPUTE_TYPE_MAP.get(compute_type_text_representation, "default")
+        hf_model_name = AUDIO_QUALITY_MAP.get(audio_quality_text_representation,"distil-whisper/distil-large-v2")
+        compute_type_pytorch = COMPUTE_TYPE_MAP.get(compute_type_text_representation, torch.float16)
 
         self.logger.debug(f"Starting transcription with model: {hf_model_name} and compute type: {compute_type_pytorch}")
-
-        await update_and_monitor_gdrive_status(self.gh, status=WorkflowEnum.TRANSCRIBING.name,transcript_audio_quality=hf_model_name, transcript_compute_type=str(compute_type_pytorch), comment= f'Start by loading the whisper {hf_model_name} model.')
+        str_compute_type = WorkflowTracker.get_compute_type_string(compute_type_text_representation) # reconcile when this is 'default'
+        str_audio_quality = WorkflowTracker.get_audio_quality_string(audio_quality_text_representation)
+        await update_and_monitor_gdrive_status(self.gh, status=WorkflowEnum.TRANSCRIBING.name,transcript_audio_quality=str_audio_quality, transcript_compute_type=str_compute_type, comment= f'Start by loading the whisper {hf_model_name} model.')
 
         transcription_text = ""
         audio_file_path = WorkflowTracker.get('local_mp3_path')
@@ -283,7 +285,7 @@ class AudioTranscriber:
 
         It's wrapped with an async error handler to gracefully handle failures, marking the transcription phase as failed in such events. The method encapsulates model loading and execution within a synchronous function, offloading it to an executor to maintain async workflow integrity.
         """
-        self.logger.debug("Transcribe using HF's Transformer pipeline (_transcribe_pipeline)...LOADING MODEL")
+        self.logger.debug(f"Transcribe using HF's Transformer pipeline (_transcribe_pipeline)...LOADING MODEL {model_name} using compute type {compute_float_type}")
         def load_and_run_pipeline():
             pipe = pipeline(
                 "automatic-speech-recognition",

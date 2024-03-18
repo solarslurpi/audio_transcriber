@@ -55,13 +55,13 @@ def logger():
 @pytest.mark.asyncio
 async def test_workflow_status_in_gdrive_files(gh, mp3_gdrive_id,logger):
     files_to_transcribe = await gh.list_files_to_transcribe(mp3_gdrive_id)
-
+    print(f"\n---------------------\nThe number of files to transcribe is: {len(files_to_transcribe)}\n---------------------\n")
     for gfile in files_to_transcribe:
         gfile_id = gfile.get('id')
         gfile_input = GDriveInput(gdrive_id=gfile_id)
         # Assuming gfile is an instance containing the Google Drive file ID and other metadata
         await gh.sync_workflowTracker_from_gfile_description(gfile_input)
-        logger.warning(f"\n---------\n {WorkflowTracker.get_model().model_dump_json(indent=4)}")
+        logger.flow(f"\n---------\n {WorkflowTracker.get_model().model_dump_json(indent=4)}")
 
 
 @pytest.mark.asyncio

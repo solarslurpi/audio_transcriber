@@ -1,3 +1,34 @@
+###########################################################################################
+# Author: HappyDay Johnson
+# Version: 0.01
+# Date: 2024-03-20
+# Summary: This module provides comprehensive file validation capabilities for various input types,
+# including mp3 files, Google Drive file IDs, and YouTube URLs. Utilizing Pydantic models for data
+# validation and FastAPI for file uploads, it ensures that only correctly formatted and sized mp3 files,
+# valid Google Drive IDs, and YouTube URLs are processed. The validators check for file extensions,
+# size constraints, and adherence to specific patterns or length requirements. ExtensionChecker and
+# FilenameLengthChecker classes offer additional utility methods for mp3 file validation.
+
+# License Information: MIT License
+
+# Copyright (c) 2024 HappyDay Johnson
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE
+
 import os
 import re
 from typing import Union
