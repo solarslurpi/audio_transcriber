@@ -49,7 +49,7 @@ from pydantic_models import GDriveInput
 
 
 AUDIO_QUALITY_MAP = {
-    "default":  "distil-whisper/distil-large-v2",
+    "default":  "openai/whisper-large-v3",
     "tiny": "openai/whisper-tiny",
     "tiny.en": "openai/whisper-tiny.en",
     "base": "openai/whisper-base",
@@ -60,6 +60,7 @@ AUDIO_QUALITY_MAP = {
     "medium.en": "openai/whisper-medium.en",
     "large": "openai/whisper-large",
     "large-v2": "openai/whisper-large-v2",
+    "large-v3": "openai/whisper-large-v3",
     "distil-large-v2": "distil-whisper/distil-large-v2",
     "distil-medium.en": "distil-whisper/distil-medium.en",
     "distil-small.en": "distil-whisper/distil-small.en",

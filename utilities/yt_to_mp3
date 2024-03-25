@@ -38,7 +38,8 @@ OutputPath=$(realpath "$OutputDir")/
 echo "Downloading audio from '$1' to MP3 format in '$OutputPath'"
 
 # Run yt-dlp to download the audio as MP3 to the specified output directory
-yt-dlp -x --audio-format mp3 --audio-quality 0 --postprocessor-args "-ar 16000 -ac 1" -o "${OutputPath}%(title)s.%(ext)s" "$1"
+# yt-dlp -x --audio-format mp3 --audio-quality 0 --postprocessor-args "-ar 16000 -ac 1" -o "${OutputPath}%(title)s.%(ext)s" "$1"
+yt-dlp -x --audio-format mp3 --audio-quality 0 --postprocessor-args "-ar 16000 -ac 1" -o "${OutputPath}%(title)s_%(upload_date)s.%(ext)s" "$1"
 
 # Check if yt-dlp succeeded
 if [ $? -ne 0 ]; then

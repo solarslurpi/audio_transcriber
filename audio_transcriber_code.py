@@ -73,14 +73,14 @@ class AudioTranscriber:
 
 
     @async_error_handler()
-    async def transcribe(self) -> str:
+    async def transcribe(self,input_mp3=None,audio_quality="default",compute_type="default") -> str:
 
         """
         Transcribes audio to text, orchestrating workflow via WorkflowTracker updates.
 
         Prerequisites:
-        - WorkflowTracker initialized with:
-            - input_mp3: GDriveInput or UploadFile datatype set.
+        - Start with:
+            - input_mp3: GDriveInput or UploadFile datatype set. NOT OPTIONAL.
             - transcript_audio_quality: OPTIONAL. One of the text strings within
               AUDIO_QUALITY_MAP.  The default value is "default" by the WorkflowTrackerModel on instance creation.
             - transcript_compute_type: OPTIONAL. This is either "float16" or "float32".
@@ -100,7 +100,7 @@ class AudioTranscriber:
             -all errors are handled by the @async_error_handler() decorator.
         """
         gfile_id = None
-        input_mp3 = WorkflowTracker.get('input_mp3')
+        WorkflowTracker.update(input_mp3=input_mp3,audio_quality=audio_quality,compute_type=compute_type)
         if isinstance(input_mp3, GDriveInput):
             gfile_id = input_mp3.gdrive_id
         mp3_gfile_id = gfile_id if gfile_id else None
@@ -157,6 +157,8 @@ class AudioTranscriber:
         Raises:
         - Exception: Propagates any exceptions raised during the file copying or downloading process.
         """
+        mp3_gfile_id = None
+        mp3_path = None
         input_mp3 = WorkflowTracker.get('input_mp3')
         if isinstance(input_mp3, UploadFile):
             # Check the contents of the UploadFile to see if it contains an mp3 file.

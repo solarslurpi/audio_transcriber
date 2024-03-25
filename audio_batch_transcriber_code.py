@@ -79,9 +79,8 @@ async def main():
         logger.flow(f"\n---------\n {WorkflowTracker.get_model().model_dump_json(indent=4)}")
         status = WorkflowTracker.get('status')
         if status != WorkflowEnum.TRANSCRIPTION_UPLOAD_COMPLETE.name:
-            # Transcribe mp3
             transcriber = AudioTranscriber()
-            await transcriber.transcribe()
+            await transcriber.transcribe(input_mp3 = gdrive_input)
 
 
 if __name__ == "__main__":
