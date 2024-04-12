@@ -305,9 +305,13 @@ class GDriveHelper:
         def _get_stored_workflowTracker() -> str:
             file_metadata = self.drive.CreateFile({'id': gfile_id})
             # Fetch metadata for the file
-            file_metadata.FetchMetadata(fields='description')
-            description = file_metadata.get('description', '{}')
-            workflowTracker_dict = json.loads(description)
+            try:
+                file_metadata.FetchMetadata(fields='description')
+                description = file_metadata.get('description', '{}')
+                workflowTracker_dict = json.loads(description)
+            except Exception as e:
+                self.logger.warning("The Worflowtracker dictionary was not loaded from the description field.  Creating an empty dictionary.")
+                workflowTracker_dict = {}
             return workflowTracker_dict
 
         workflowTracker_dict = await loop.run_in_executor(None, _get_stored_workflowTracker)
